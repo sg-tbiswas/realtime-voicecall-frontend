@@ -16,7 +16,7 @@ const LiveCallApp = () => {
   useEffect(() => {
     if (session && !isSocketInitialized.current) {
       console.log("Session detected, connecting to socket");
-      socketRef.current = io("http://localhost:5000", {
+      socketRef.current = io("https://realtime-voicecall-backend.vercel.app", {
         path: "/socket",
       });
 
