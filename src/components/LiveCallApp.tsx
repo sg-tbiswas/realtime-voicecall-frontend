@@ -9,6 +9,7 @@ const LiveCallApp = () => {
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [inCall, setInCall] = useState(false);
   const callPartnerRef = useRef<any>(null); // Using useRef for callPartner
+  const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const isSocketInitialized = useRef(false);
@@ -16,9 +17,11 @@ const LiveCallApp = () => {
   useEffect(() => {
     if (session && !isSocketInitialized.current) {
       console.log("Session detected, connecting to socket");
-      socketRef.current = io("https://call.sentientgeeks.us", {
-        path: "/socket",
-      });
+      if (!socketRef.current) {
+        socketRef.current = io(process.env.SOCKET_URL, {
+          path: "/socket",
+        });
+      }
 
       socketRef.current.on("connect", () => {
         console.log("Connected to socket server");
@@ -86,6 +89,7 @@ const LiveCallApp = () => {
       console.log("Disconnecting socket");
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
         isSocketInitialized.current = false;
       }
     };
@@ -96,6 +100,7 @@ const LiveCallApp = () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true, // Request only audio
       });
+      localStreamRef.current = stream;
       return stream;
     } catch (error) {
       console.error("Error accessing audio device:", error);
@@ -107,7 +112,7 @@ const LiveCallApp = () => {
     peerConnectionRef.current = new RTCPeerConnection({
       iceServers: [
         {
-          urls: "stun:75.119.158.149:3478",
+          urls: process.env.STUN_URL as string,
         },
       ],
     });
@@ -200,12 +205,23 @@ const LiveCallApp = () => {
   const initiateCall = async (user: any) => {
     console.log("Initiating call to:", user);
     callPartnerRef.current = user; // Store callPartner in ref
+    await setupMediaDevices(); // Reset the media stream
+    await createPeerConnection(); // Create a fresh peer connection
     socketRef.current?.emit("call-request", { to: user.socketId });
   };
 
   const endCall = () => {
     if (peerConnectionRef.current) {
+      peerConnectionRef.current.onicecandidate = null;
+      peerConnectionRef.current.ontrack = null;
       peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    const localStream = localStreamRef.current;
+    if (localStream) {
+      localStream.getTracks().forEach((track) => {
+        track.stop();
+      });
     }
     setInCall(false);
     callPartnerRef.current = null; // Clear callPartner ref
