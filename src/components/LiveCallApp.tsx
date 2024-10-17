@@ -107,7 +107,7 @@ const LiveCallApp = () => {
     peerConnectionRef.current = new RTCPeerConnection({
       iceServers: [
         {
-          urls: "stun:115.246.139.69:3478",
+          urls: "stun:75.119.158.149:3478",
         },
       ],
     });
