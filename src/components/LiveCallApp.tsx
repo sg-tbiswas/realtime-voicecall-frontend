@@ -16,7 +16,7 @@ const LiveCallApp = () => {
   useEffect(() => {
     if (session && !isSocketInitialized.current) {
       console.log("Session detected, connecting to socket");
-      socketRef.current = io("75.119.158.149:5007", {
+      socketRef.current = io("https://call.sentientgeeks.us", {
         path: "/socket",
       });
 
