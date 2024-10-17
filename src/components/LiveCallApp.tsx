@@ -105,7 +105,7 @@ const LiveCallApp = () => {
 
   const createPeerConnection = async () => {
     peerConnectionRef.current = new RTCPeerConnection({
-      iceServers: [{ urls: "stun.l.google.com:19302" }],
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
     peerConnectionRef.current.onicecandidate = handleICECandidateEvent;
