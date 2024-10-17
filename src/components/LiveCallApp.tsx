@@ -18,7 +18,7 @@ const LiveCallApp = () => {
     if (session && !isSocketInitialized.current) {
       console.log("Session detected, connecting to socket");
       if (!socketRef.current) {
-        socketRef.current = io(process.env.SOCKET_URL, {
+        socketRef.current = io("https://call.sentientgeeks.us", {
           path: "/socket",
         });
       }
