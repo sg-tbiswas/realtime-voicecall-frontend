@@ -8,7 +8,7 @@ const LiveCallApp = () => {
   const { data: session } = useSession();
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [inCall, setInCall] = useState(false);
-  const [callPartner, setCallPartner] = useState<any>(null);
+  const callPartnerRef = useRef<any>(null); // Using useRef for callPartner
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const isSocketInitialized = useRef(false);
@@ -40,7 +40,7 @@ const LiveCallApp = () => {
         console.log("Incoming call request from:", data.caller);
         if (window.confirm(`${data.caller.name} is calling. Answer?`)) {
           setInCall(true);
-          setCallPartner(data.caller);
+          callPartnerRef.current = data.caller; // Update the ref directly
           await setupMediaDevices();
           socketRef.current?.emit("call-accepted", {
             to: data.caller.socketId,
@@ -74,8 +74,8 @@ const LiveCallApp = () => {
       });
 
       socketRef.current.on("webrtc-ice-candidate", async (data: any) => {
-        console.log("Received ICE Candidate", data.candidate);
         const candidate = new RTCIceCandidate(data.candidate);
+        console.log("Received ICE Candidate", candidate);
         await peerConnectionRef.current?.addIceCandidate(candidate);
       });
 
@@ -132,7 +132,7 @@ const LiveCallApp = () => {
     const offer = await peerConnectionRef.current?.createOffer();
     if (offer) {
       await peerConnectionRef.current?.setLocalDescription(offer);
-      console.log("Call partner:", callPartner);
+      console.log("Call partner:", callPartnerRef.current);
       socketRef.current?.emit("webrtc-offer", {
         offer: offer,
         to: caller.socketId,
@@ -167,7 +167,7 @@ const LiveCallApp = () => {
       console.log("Sending ICE Candidate", event);
       socketRef.current?.emit("webrtc-ice-candidate", {
         candidate: event.candidate,
-        to: callPartner?.socketId,
+        to: callPartnerRef.current?.socketId, // Access callPartner from ref
       });
     }
   };
@@ -201,7 +201,7 @@ const LiveCallApp = () => {
 
   const initiateCall = async (user: any) => {
     console.log("Initiating call to:", user);
-    setCallPartner(user);
+    callPartnerRef.current = user; // Store callPartner in ref
     socketRef.current?.emit("call-request", { to: user.socketId });
   };
 
@@ -210,12 +210,8 @@ const LiveCallApp = () => {
       peerConnectionRef.current.close();
     }
     setInCall(false);
-    setCallPartner(null);
+    callPartnerRef.current = null; // Clear callPartner ref
   };
-
-  useEffect(() => {
-    console.log("Call partner changed:", callPartner);
-  }, [callPartner]);
 
   return (
     <div className="container mx-auto px-4">
@@ -233,7 +229,9 @@ const LiveCallApp = () => {
           </button>
           {inCall ? (
             <div className="mt-4">
-              <h2 className="text-xl mb-2">In call with {callPartner.name}</h2>
+              <h2 className="text-xl mb-2">
+                In call with {callPartnerRef.current?.name}
+              </h2>
               {/* Audio-only, no video elements */}
               <button
                 onClick={endCall}
