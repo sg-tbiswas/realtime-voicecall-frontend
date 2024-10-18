@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import io, { Socket } from "socket.io-client";
 
+let socketInstance: Socket | null = null;
+
 const LiveCallApp = () => {
   const { data: session } = useSession();
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
@@ -19,89 +21,88 @@ const LiveCallApp = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    if (session && !isSocketInitialized.current) {
+    if (session && !socketInstance) {
       console.log("Session detected, connecting to socket");
 
-      if (!socketRef.current) {
-        socketRef.current = io("https://call.sentientgeeks.us", {
-          path: "/socket",
-        });
+      socketInstance = io("https://call.sentientgeeks.us", {
+        path: "/socket",
+      });
 
-        socketRef.current.on("connect", () => {
-          console.log("Connected to socket server");
-          socketRef.current?.emit("user-online", {
-            userId: session.user.id,
-            name: session.user.name,
-            socketId: socketRef.current.id,
-          });
+      socketInstance.on("connect", () => {
+        console.log("Connected to socket server");
+        socketInstance?.emit("user-online", {
+          userId: session.user.id,
+          name: session.user.name,
+          socketId: socketInstance.id,
         });
+      });
 
-        socketRef.current.on("online-users", (users) => {
-          console.log("Received online users:", users);
-          setOnlineUsers(
-            users.filter((user: any) => user.userId !== session.user.id)
-          );
-        });
+      socketInstance.on("online-users", (users) => {
+        console.log("Received online users:", users);
+        setOnlineUsers(
+          users.filter((user: any) => user.userId !== session.user.id)
+        );
+      });
 
-        socketRef.current.on("call-request", async (data: any) => {
-          console.log("Incoming call request from:", data.caller);
-          if (window.confirm(`${data.caller.name} is calling. Answer?`)) {
-            inCallRef.current = true;
-            callPartnerRef.current = data.caller;
-            setInCall(true);
-            setCallPartner(data.caller);
-            await setupMediaDevices();
-            socketRef.current?.emit("call-accepted", {
-              to: data.caller.socketId,
-            });
-          } else {
-            socketRef.current?.emit("call-rejected", {
-              to: data.caller.socketId,
-            });
-          }
-        });
-
-        socketRef.current.on("call-accepted", async (data: any) => {
+      socketInstance.on("call-request", async (data: any) => {
+        console.log("Incoming call request from:", data.caller);
+        if (window.confirm(`${data.caller.name} is calling. Answer?`)) {
           inCallRef.current = true;
           callPartnerRef.current = data.caller;
           setInCall(true);
           setCallPartner(data.caller);
           await setupMediaDevices();
-          createOffer(data.caller);
-        });
+          socketInstance?.emit("call-accepted", {
+            to: data.caller.socketId,
+          });
+        } else {
+          socketInstance?.emit("call-rejected", {
+            to: data.caller.socketId,
+          });
+        }
+      });
 
-        socketRef.current.on("call-rejected", () => {
-          alert("Call was rejected");
-          endCall();
-        });
+      socketInstance.on("call-accepted", async (data: any) => {
+        inCallRef.current = true;
+        callPartnerRef.current = data.caller;
+        setInCall(true);
+        setCallPartner(data.caller);
+        await setupMediaDevices();
+        createOffer(data.caller);
+      });
 
-        socketRef.current.on("webrtc-offer", async (data: any) => {
-          console.log("Received WebRTC Offer", data);
-          await handleOffer(data);
-        });
+      socketInstance.on("call-rejected", () => {
+        alert("Call was rejected");
+        endCall();
+      });
 
-        socketRef.current.on("webrtc-answer", async (data: any) => {
-          console.log("Received WebRTC Answer", data);
-          await handleAnswer(data);
-        });
+      socketInstance.on("webrtc-offer", async (data: any) => {
+        console.log("Received WebRTC Offer", data);
+        await handleOffer(data);
+      });
 
-        socketRef.current.on("webrtc-ice-candidate", async (data: any) => {
-          console.log("Received ICE Candidate", data.candidate);
-          const candidate = new RTCIceCandidate(data.candidate);
-          if (peerConnectionRef.current?.remoteDescription) {
-            await peerConnectionRef.current.addIceCandidate(candidate);
-          } else {
-            iceCandidatesQueue.current.push(candidate);
-          }
-        });
+      socketInstance.on("webrtc-answer", async (data: any) => {
+        console.log("Received WebRTC Answer", data);
+        await handleAnswer(data);
+      });
 
-        socketRef.current.on("call-ended", () => {
-          console.log("Call ended by the other user");
-          endCall();
-        });
+      socketInstance.on("webrtc-ice-candidate", async (data: any) => {
+        console.log("Received ICE Candidate", data.candidate);
+        const candidate = new RTCIceCandidate(data.candidate);
+        if (peerConnectionRef.current?.remoteDescription) {
+          await peerConnectionRef.current.addIceCandidate(candidate);
+        } else {
+          iceCandidatesQueue.current.push(candidate);
+        }
+      });
 
-        isSocketInitialized.current = true;
-      }
+      socketInstance.on("call-ended", () => {
+        console.log("Call ended by the other user");
+        endCall();
+      });
+
+      socketRef.current = socketInstance;
+      isSocketInitialized.current = true;
     }
 
     return () => {
@@ -109,6 +110,7 @@ const LiveCallApp = () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
+        socketInstance = null;
         isSocketInitialized.current = false;
       }
     };
