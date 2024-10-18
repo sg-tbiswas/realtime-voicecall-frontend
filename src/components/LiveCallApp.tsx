@@ -11,7 +11,6 @@ const LiveCallApp = () => {
   const [callPartner, setCallPartner] = useState<any>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const isSocketInitialized = useRef(false);
   const callPartnerRef = useRef<any>(null);
   const inCallRef = useRef(false);
   const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
@@ -19,10 +18,12 @@ const LiveCallApp = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    if (session && !isSocketInitialized.current) {
-      console.log("Session detected, connecting to socket");
+    if (session) {
+      const socketInitialized = sessionStorage.getItem("socketInitialized");
 
-      if (!socketRef.current) {
+      if (!socketInitialized) {
+        console.log("Session detected, connecting to socket");
+
         socketRef.current = io("https://call.sentientgeeks.us", {
           path: "/socket",
         });
@@ -100,7 +101,7 @@ const LiveCallApp = () => {
           endCall();
         });
 
-        isSocketInitialized.current = true;
+        sessionStorage.setItem("socketInitialized", "true");
       }
     }
 
@@ -109,7 +110,7 @@ const LiveCallApp = () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
-        isSocketInitialized.current = false;
+        sessionStorage.removeItem("socketInitialized");
       }
     };
   }, [session]);
@@ -257,12 +258,12 @@ const LiveCallApp = () => {
       remoteAudioRef.current.srcObject = null;
     }
     inCallRef.current = false;
+    setInCall(false);
+    setCallPartner(null);
     socketRef.current?.emit("call-ended", {
       to: callPartnerRef.current?.socketId,
     });
     callPartnerRef.current = null;
-    setInCall(false);
-    setCallPartner(null);
   };
 
   return (
