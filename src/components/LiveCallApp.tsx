@@ -15,6 +15,7 @@ const LiveCallApp = () => {
   const callPartnerRef = useRef<any>(null);
   const inCallRef = useRef(false);
   const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (session && !isSocketInitialized.current) {
@@ -208,24 +209,25 @@ const LiveCallApp = () => {
     if (event.track.kind === "audio") {
       console.log("Audio track received:", event.track);
 
-      const audioElement = new Audio();
-      audioElement.srcObject = event.streams[0];
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = event.streams[0];
 
-      // Attempt to play the audio
-      audioElement
-        .play()
-        .then(() => {
-          console.log("Audio is playing.");
-        })
-        .catch((error) => {
-          console.error("Error playing audio:", error);
+        // Attempt to play the audio
+        remoteAudioRef.current
+          .play()
+          .then(() => {
+            console.log("Audio is playing.");
+          })
+          .catch((error) => {
+            console.error("Error playing audio:", error);
+          });
+
+        // Log the stream and tracks
+        console.log("Audio stream:", event.streams[0]);
+        event.streams[0].getTracks().forEach((track) => {
+          console.log("Stream track:", track);
         });
-
-      // Log the stream and tracks
-      console.log("Audio stream:", event.streams[0]);
-      event.streams[0].getTracks().forEach((track) => {
-        console.log("Stream track:", track);
-      });
+      }
     }
   };
 
@@ -270,6 +272,7 @@ const LiveCallApp = () => {
               >
                 End Call
               </button>
+              <audio ref={remoteAudioRef} autoPlay />
             </div>
           ) : (
             <>
