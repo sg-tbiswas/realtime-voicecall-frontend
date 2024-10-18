@@ -16,6 +16,7 @@ const LiveCallApp = () => {
   const inCallRef = useRef(false);
   const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (session && !isSocketInitialized.current) {
@@ -94,6 +95,11 @@ const LiveCallApp = () => {
           }
         });
 
+        socketRef.current.on("call-ended", () => {
+          console.log("Call ended by the other user");
+          endCall();
+        });
+
         isSocketInitialized.current = true;
       }
     }
@@ -113,6 +119,7 @@ const LiveCallApp = () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true, // Request only audio
       });
+      localStreamRef.current = stream;
       return stream;
     } catch (error) {
       console.error("Error accessing audio device:", error);
@@ -242,7 +249,17 @@ const LiveCallApp = () => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
     }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
     inCallRef.current = false;
+    socketRef.current?.emit("call-ended", {
+      to: callPartnerRef.current?.socketId,
+    });
     callPartnerRef.current = null;
     setInCall(false);
     setCallPartner(null);
