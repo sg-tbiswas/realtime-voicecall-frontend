@@ -24,12 +24,13 @@ const LiveCallApp = () => {
   const callDurationRef = useRef<number>(0); // To store duration when call is paused
   const timerRef = useRef<NodeJS.Timeout | null>(null); // To store interval ID
   const [incomingCall, setIncomingCall] = useState<any>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (session && !socketInstance) {
       console.log("Session detected, connecting to socket");
 
-      socketInstance = io("http://localhost:5007", {
+      socketInstance = io("https://call.sentientgeeks.us", {
         path: "/socket",
       });
 
@@ -52,6 +53,11 @@ const LiveCallApp = () => {
       socketInstance.on("call-request", async (data: any) => {
         console.log("Incoming call request from:", data.caller);
         setIncomingCall(data.caller);
+        if (ringtoneRef.current) {
+          ringtoneRef.current.play().catch((err) => {
+            console.error("Error playing ringtone:", err);
+          });
+        }
       });
 
       socketInstance.on("call-accepted", async (data: any) => {
@@ -134,6 +140,10 @@ const LiveCallApp = () => {
     socketInstance?.emit("call-accepted", {
       to: incomingCall.socketId,
     });
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
   };
 
   const handleReject = () => {
@@ -141,6 +151,10 @@ const LiveCallApp = () => {
     socketInstance?.emit("call-rejected", {
       to: incomingCall.socketId,
     });
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
   };
 
   const setupMediaDevices = async () => {
@@ -372,6 +386,7 @@ const LiveCallApp = () => {
             Sign In
           </button>
         )}
+        <audio ref={ringtoneRef} src="/audio/ringtone.mp3" loop />
       </div>
     </>
   );
