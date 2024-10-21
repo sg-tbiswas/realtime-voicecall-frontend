@@ -25,6 +25,10 @@ const LiveCallApp = () => {
   const timerRef = useRef<NodeJS.Timeout | null>(null); // To store interval ID
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     if (session && !socketInstance) {
@@ -137,6 +141,7 @@ const LiveCallApp = () => {
     setInCall(true);
     setCallPartner(incomingCall);
     setupMediaDevices();
+    startCallTimer();
     socketInstance?.emit("call-accepted", {
       to: incomingCall.socketId,
     });
@@ -154,6 +159,52 @@ const LiveCallApp = () => {
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
+    }
+  };
+
+  const startRecording = () => {
+    if (!localStreamRef.current) return;
+
+    const mediaRecorder = new MediaRecorder(localStreamRef.current);
+    mediaRecorderRef.current = mediaRecorder;
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+      }
+    };
+
+    mediaRecorder.start();
+    setIsRecording(true);
+    console.log("Recording started");
+  };
+
+  const stopRecording = async () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+
+    // Combine the recorded chunks into a single file
+    const recordedBlob = new Blob(recordedChunksRef.current, {
+      type: "audio/mpeg-3",
+    });
+    const recordingURL = URL.createObjectURL(recordedBlob);
+
+    // Automatically download the recording
+    const downloadLink = document.createElement("a");
+    downloadLink.href = recordingURL;
+    downloadLink.download = "call-recording.mp3";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+
+    console.log("Recording stopped and saved");
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
@@ -290,7 +341,7 @@ const LiveCallApp = () => {
     socketRef.current?.emit("call-request", { to: user.socketId });
   };
 
-  const endCall = () => {
+  const endCall = async () => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
     }
@@ -315,6 +366,20 @@ const LiveCallApp = () => {
     setInCall(false);
     setCallPartner(null);
     setCallDuration(0);
+    if (isRecording) {
+      await stopRecording();
+    }
+  };
+
+  const toggleMute = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        if (track.kind === "audio") {
+          track.enabled = !track.enabled; // Toggle the enabled property
+        }
+      });
+    }
+    setIsMuted((prev) => !prev); // Update mute state
   };
 
   return (
@@ -328,28 +393,49 @@ const LiveCallApp = () => {
         <h1 className="text-3xl font-bold mb-4">One-on-One Audio Call App</h1>
         {session ? (
           <>
-            <p>
-              Logged in as: {session.user.name} (ID: {session.user.id})
-            </p>
-            <button
-              onClick={() => signOut()}
-              className="bg-red-500 text-white px-4 py-2 rounded"
-            >
-              Sign Out
-            </button>
+            <div className="flex flex-row justify-between">
+              <p>
+                Logged in as: {session.user.name} (ID: {session.user.id})
+              </p>
+              <button
+                onClick={() => signOut()}
+                className="bg-red-500 text-white px-4 py-2 rounded"
+              >
+                Sign Out
+              </button>
+            </div>
             {inCall ? (
               <div className="mt-4">
                 <h2 className="text-xl mb-2">
                   In call with {callPartner?.name}
                 </h2>
                 <p>Call Duration: {formatCallDuration(callDuration)}</p>
-                {/* Audio-only, no video elements */}
-                <button
-                  onClick={endCall}
-                  className="bg-red-500 text-white px-4 py-2 rounded mt-4"
-                >
-                  End Call
-                </button>
+                <div className="flex flex-row gap-2 mt-4">
+                  <button
+                    onClick={toggleMute}
+                    className={`px-4 py-2 rounded ${
+                      isMuted ? "bg-yellow-500" : "bg-blue-500"
+                    } text-white`}
+                  >
+                    {isMuted ? "Unmute" : "Mute"}
+                  </button>
+
+                  <button
+                    onClick={toggleRecording}
+                    className={` px-4 py-2 rounded ${
+                      isRecording ? "bg-red-500" : "bg-green-500"
+                    } text-white`}
+                  >
+                    {isRecording ? "Stop Recording" : "Start Recording"}
+                  </button>
+                  {/* Audio-only, no video elements */}
+                  <button
+                    onClick={endCall}
+                    className="bg-red-500 text-white px-4 py-2 rounded"
+                  >
+                    End Call
+                  </button>
+                </div>
                 <audio ref={remoteAudioRef} autoPlay />
               </div>
             ) : (
