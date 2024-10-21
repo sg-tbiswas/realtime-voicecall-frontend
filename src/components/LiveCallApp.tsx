@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import io, { Socket } from "socket.io-client";
+import IncomingCallModal from "./IncomingCallModal";
 
 let socketInstance: Socket | null = null;
 
@@ -19,12 +20,16 @@ const LiveCallApp = () => {
   const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const [callDuration, setCallDuration] = useState(0); // in seconds
+  const callDurationRef = useRef<number>(0); // To store duration when call is paused
+  const timerRef = useRef<NodeJS.Timeout | null>(null); // To store interval ID
+  const [incomingCall, setIncomingCall] = useState<any>(null);
 
   useEffect(() => {
     if (session && !socketInstance) {
       console.log("Session detected, connecting to socket");
 
-      socketInstance = io("https://call.sentientgeeks.us", {
+      socketInstance = io("http://localhost:5007", {
         path: "/socket",
       });
 
@@ -46,20 +51,7 @@ const LiveCallApp = () => {
 
       socketInstance.on("call-request", async (data: any) => {
         console.log("Incoming call request from:", data.caller);
-        if (window.confirm(`${data.caller.name} is calling. Answer?`)) {
-          inCallRef.current = true;
-          callPartnerRef.current = data.caller;
-          setInCall(true);
-          setCallPartner(data.caller);
-          await setupMediaDevices();
-          socketInstance?.emit("call-accepted", {
-            to: data.caller.socketId,
-          });
-        } else {
-          socketInstance?.emit("call-rejected", {
-            to: data.caller.socketId,
-          });
-        }
+        setIncomingCall(data.caller);
       });
 
       socketInstance.on("call-accepted", async (data: any) => {
@@ -115,6 +107,41 @@ const LiveCallApp = () => {
       }
     };
   }, [session]);
+
+  const startCallTimer = () => {
+    callDurationRef.current = 0;
+    setCallDuration(0);
+
+    timerRef.current = setInterval(() => {
+      callDurationRef.current += 1;
+      setCallDuration(callDurationRef.current);
+    }, 1000); // Update the timer every second
+  };
+
+  const formatCallDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds < 10 ? "0" : ""}${remainingSeconds}`;
+  };
+
+  const handleAccept = () => {
+    setIncomingCall(null);
+    inCallRef.current = true;
+    callPartnerRef.current = incomingCall;
+    setInCall(true);
+    setCallPartner(incomingCall);
+    setupMediaDevices();
+    socketInstance?.emit("call-accepted", {
+      to: incomingCall.socketId,
+    });
+  };
+
+  const handleReject = () => {
+    setIncomingCall(null);
+    socketInstance?.emit("call-rejected", {
+      to: incomingCall.socketId,
+    });
+  };
 
   const setupMediaDevices = async () => {
     try {
@@ -178,6 +205,8 @@ const LiveCallApp = () => {
         to: data.caller.socketId,
       });
     }
+
+    startCallTimer();
 
     // Add queued ICE candidates
     while (iceCandidatesQueue.current.length > 0) {
@@ -259,75 +288,92 @@ const LiveCallApp = () => {
       remoteAudioRef.current.srcObject = null;
     }
     inCallRef.current = false;
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     socketRef.current?.emit("call-ended", {
       to: callPartnerRef.current?.socketId,
     });
     callPartnerRef.current = null;
     setInCall(false);
     setCallPartner(null);
+    setCallDuration(0);
   };
 
   return (
-    <div className="container mx-auto px-4">
-      <h1 className="text-3xl font-bold mb-4">One-on-One Audio Call App</h1>
-      {session ? (
-        <>
-          <p>
-            Logged in as: {session.user.name} (ID: {session.user.id})
-          </p>
-          <button
-            onClick={() => signOut()}
-            className="bg-red-500 text-white px-4 py-2 rounded"
-          >
-            Sign Out
-          </button>
-          {inCall ? (
-            <div className="mt-4">
-              <h2 className="text-xl mb-2">In call with {callPartner?.name}</h2>
-              {/* Audio-only, no video elements */}
-              <button
-                onClick={endCall}
-                className="bg-red-500 text-white px-4 py-2 rounded mt-4"
-              >
-                End Call
-              </button>
-              <audio ref={remoteAudioRef} autoPlay />
-            </div>
-          ) : (
-            <>
-              <h2 className="text-xl mt-4 mb-2">
-                Online Users ({onlineUsers.length})
-              </h2>
-              <ul className="space-y-2">
-                {onlineUsers.map((user) => (
-                  <li
-                    key={user.userId}
-                    className="flex items-center justify-between bg-gray-100 p-2 rounded"
-                  >
-                    <span>
-                      {user.name} (ID: {user.userId})
-                    </span>
-                    <button
-                      onClick={() => initiateCall(user)}
-                      className="bg-blue-500 text-white px-4 py-2 rounded"
+    <>
+      <IncomingCallModal
+        caller={incomingCall}
+        onAccept={handleAccept}
+        onReject={handleReject}
+      />
+      <div className="container mx-auto px-4">
+        <h1 className="text-3xl font-bold mb-4">One-on-One Audio Call App</h1>
+        {session ? (
+          <>
+            <p>
+              Logged in as: {session.user.name} (ID: {session.user.id})
+            </p>
+            <button
+              onClick={() => signOut()}
+              className="bg-red-500 text-white px-4 py-2 rounded"
+            >
+              Sign Out
+            </button>
+            {inCall ? (
+              <div className="mt-4">
+                <h2 className="text-xl mb-2">
+                  In call with {callPartner?.name}
+                </h2>
+                <p>Call Duration: {formatCallDuration(callDuration)}</p>
+                {/* Audio-only, no video elements */}
+                <button
+                  onClick={endCall}
+                  className="bg-red-500 text-white px-4 py-2 rounded mt-4"
+                >
+                  End Call
+                </button>
+                <audio ref={remoteAudioRef} autoPlay />
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl mt-4 mb-2">
+                  Online Users ({onlineUsers.length})
+                </h2>
+                <ul className="space-y-2">
+                  {onlineUsers.map((user) => (
+                    <li
+                      key={user.userId}
+                      className="flex items-center justify-between bg-gray-100 p-2 rounded"
                     >
-                      Call
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </>
-      ) : (
-        <button
-          onClick={() => signIn()}
-          className="bg-green-500 text-white px-4 py-2 rounded"
-        >
-          Sign In
-        </button>
-      )}
-    </div>
+                      <span>
+                        {user.name} (ID: {user.userId})
+                      </span>
+                      <button
+                        onClick={() => initiateCall(user)}
+                        className="bg-blue-500 text-white px-4 py-2 rounded"
+                      >
+                        Call
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        ) : (
+          <button
+            onClick={() => signIn()}
+            className="bg-green-500 text-white px-4 py-2 rounded"
+          >
+            Sign In
+          </button>
+        )}
+      </div>
+    </>
   );
 };
 
