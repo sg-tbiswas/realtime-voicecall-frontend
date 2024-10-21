@@ -29,6 +29,7 @@ const LiveCallApp = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const [isMuted, setIsMuted] = useState(false);
+  const autoRecordRef = useRef(false);
 
   useEffect(() => {
     if (session && !socketInstance) {
@@ -72,6 +73,9 @@ const LiveCallApp = () => {
         await setupMediaDevices();
         createOffer(data.caller);
         startCallTimer();
+        if (autoRecordRef.current == true) {
+          startRecording();
+        }
       });
 
       socketInstance.on("call-rejected", () => {
@@ -150,6 +154,9 @@ const LiveCallApp = () => {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
     }
+    if (autoRecordRef.current == true) {
+      startRecording();
+    }
   };
 
   const handleReject = () => {
@@ -160,6 +167,9 @@ const LiveCallApp = () => {
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
+    }
+    if (isRecording) {
+      stopRecording(); // Stop recording if it was started
     }
   };
 
@@ -400,6 +410,7 @@ const LiveCallApp = () => {
     setCallPartner(null);
     setCallDuration(0);
     setIsMuted(false);
+    autoRecordRef.current = false;
     if (isRecording) {
       await stopRecording();
     }
@@ -454,14 +465,16 @@ const LiveCallApp = () => {
                     {isMuted ? "Unmute" : "Mute"}
                   </button>
 
-                  <button
-                    onClick={toggleRecording}
-                    className={` px-4 py-2 rounded ${
-                      isRecording ? "bg-red-500" : "bg-green-500"
-                    } text-white`}
-                  >
-                    {isRecording ? "Stop Recording" : "Start Recording"}
-                  </button>
+                  {!autoRecordRef.current && (
+                    <button
+                      onClick={toggleRecording}
+                      className={`px-4 py-2 rounded ${
+                        isRecording ? "bg-red-500" : "bg-green-500"
+                      } text-white`}
+                    >
+                      {isRecording ? "Stop Recording" : "Start Recording"}
+                    </button>
+                  )}
                   {/* Audio-only, no video elements */}
                   <button
                     onClick={endCall}
@@ -491,6 +504,15 @@ const LiveCallApp = () => {
                         className="bg-blue-500 text-white px-4 py-2 rounded"
                       >
                         Call
+                      </button>
+                      <button
+                        onClick={() => {
+                          autoRecordRef.current = true;
+                          initiateCall(user);
+                        }}
+                        className="bg-purple-500 text-white px-4 py-2 rounded"
+                      >
+                        Call & Record
                       </button>
                     </li>
                   ))}
