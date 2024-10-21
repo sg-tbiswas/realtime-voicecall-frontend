@@ -71,6 +71,7 @@ const LiveCallApp = () => {
         setCallPartner(data.caller);
         await setupMediaDevices();
         createOffer(data.caller);
+        startCallTimer();
       });
 
       socketInstance.on("call-rejected", () => {
@@ -304,8 +305,6 @@ const LiveCallApp = () => {
         to: data.caller.socketId,
       });
     }
-
-    startCallTimer();
 
     // Add queued ICE candidates
     while (iceCandidatesQueue.current.length > 0) {
