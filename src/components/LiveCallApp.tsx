@@ -163,41 +163,75 @@ const LiveCallApp = () => {
   };
 
   const startRecording = () => {
-    if (!localStreamRef.current) return;
+    if (!localStreamRef.current) {
+      console.error("No local stream available");
+      return;
+    }
 
-    const mediaRecorder = new MediaRecorder(localStreamRef.current);
-    mediaRecorderRef.current = mediaRecorder;
+    recordedChunksRef.current = []; // Clear previous recordings
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        recordedChunksRef.current.push(event.data);
-      }
-    };
+    try {
+      const mediaRecorder = new MediaRecorder(localStreamRef.current, {
+        mimeType: "audio/webm",
+      });
 
-    mediaRecorder.start();
-    setIsRecording(true);
-    console.log("Recording started");
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        console.log("MediaRecorder stopped");
+      };
+
+      mediaRecorder.start(1000); // Collect data every second
+      setIsRecording(true);
+      console.log("Recording started");
+    } catch (error) {
+      console.error("Error starting recording:", error);
+    }
   };
 
-  const stopRecording = async () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
+  const stopRecording = () => {
+    if (
+      !mediaRecorderRef.current ||
+      mediaRecorderRef.current.state === "inactive"
+    ) {
+      console.log("No active recording to stop");
+      return;
+    }
 
-    // Combine the recorded chunks into a single file
-    const recordedBlob = new Blob(recordedChunksRef.current, {
-      type: "audio/mpeg-3",
+    return new Promise<void>((resolve) => {
+      mediaRecorderRef.current!.onstop = () => {
+        console.log("Processing recorded data");
+        if (recordedChunksRef.current.length === 0) {
+          console.error("No recorded data available");
+          setIsRecording(false);
+          resolve();
+          return;
+        }
+
+        const audioBlob = new Blob(recordedChunksRef.current, {
+          type: "audio/webm",
+        });
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        const link = document.createElement("a");
+        link.href = audioUrl;
+        link.download = "call-recording.webm";
+        link.click();
+
+        URL.revokeObjectURL(audioUrl);
+        setIsRecording(false);
+        console.log("Recording stopped and saved");
+        resolve();
+      };
+
+      mediaRecorderRef.current!.stop();
     });
-    const recordingURL = URL.createObjectURL(recordedBlob);
-
-    // Automatically download the recording
-    const downloadLink = document.createElement("a");
-    downloadLink.href = recordingURL;
-    downloadLink.download = "call-recording.mp3";
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-
-    console.log("Recording stopped and saved");
   };
 
   const toggleRecording = () => {
@@ -366,6 +400,7 @@ const LiveCallApp = () => {
     setInCall(false);
     setCallPartner(null);
     setCallDuration(0);
+    setIsMuted(false);
     if (isRecording) {
       await stopRecording();
     }
