@@ -35,7 +35,7 @@ const LiveCallApp = () => {
     if (session && !socketInstance) {
       console.log("Session detected, connecting to socket");
 
-      socketInstance = io("https://call.sentientgeeks.us", {
+      socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL as string, {
         path: "/socket",
       });
 
@@ -270,7 +270,7 @@ const LiveCallApp = () => {
     peerConnectionRef.current = new RTCPeerConnection({
       iceServers: [
         {
-          urls: "stun:75.119.158.149:3478",
+          urls: process.env.NEXT_PUBLIC_STUN_URL as string,
         },
       ],
     });
