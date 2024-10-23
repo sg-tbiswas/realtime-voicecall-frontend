@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import io, { Socket } from "socket.io-client";
 import IncomingCallModal from "./IncomingCallModal";
+import CallControls from "./CallControls";
+import OnlineUsersList from "./OnlineUsersList";
+import CallStatus from "./CallStatus";
 
 let socketInstance: Socket | null = null;
 
@@ -427,6 +430,11 @@ const LiveCallApp = () => {
     setIsMuted((prev) => !prev); // Update mute state
   };
 
+  const initiateCallWithRecording = (user: any) => {
+    autoRecordRef.current = true;
+    initiateCall(user);
+  };
+
   return (
     <>
       <IncomingCallModal
@@ -450,74 +458,28 @@ const LiveCallApp = () => {
               </button>
             </div>
             {inCall ? (
-              <div className="mt-4">
-                <h2 className="text-xl mb-2">
-                  In call with {callPartner?.name}
-                </h2>
-                <p>Call Duration: {formatCallDuration(callDuration)}</p>
-                <div className="flex flex-row gap-2 mt-4">
-                  <button
-                    onClick={toggleMute}
-                    className={`px-4 py-2 rounded ${
-                      isMuted ? "bg-yellow-500" : "bg-blue-500"
-                    } text-white`}
-                  >
-                    {isMuted ? "Unmute" : "Mute"}
-                  </button>
-
-                  {!autoRecordRef.current && (
-                    <button
-                      onClick={toggleRecording}
-                      className={`px-4 py-2 rounded ${
-                        isRecording ? "bg-red-500" : "bg-green-500"
-                      } text-white`}
-                    >
-                      {isRecording ? "Stop Recording" : "Start Recording"}
-                    </button>
-                  )}
-                  {/* Audio-only, no video elements */}
-                  <button
-                    onClick={endCall}
-                    className="bg-red-500 text-white px-4 py-2 rounded"
-                  >
-                    End Call
-                  </button>
-                </div>
-                <audio ref={remoteAudioRef} autoPlay />
-              </div>
-            ) : (
               <>
-                <h2 className="text-xl mt-4 mb-2">
-                  Online Users ({onlineUsers.length})
-                </h2>
-                <ul className="space-y-2">
-                  {onlineUsers.map((user) => (
-                    <li
-                      key={user.userId}
-                      className="flex items-center justify-between bg-gray-100 p-2 rounded"
-                    >
-                      <span>
-                        {user.name} (ID: {user.userId})
-                      </span>
-                      <button
-                        onClick={() => initiateCall(user)}
-                        className="bg-blue-500 text-white px-4 py-2 rounded"
-                      >
-                        Call
-                      </button>
-                      <button
-                        onClick={() => {
-                          autoRecordRef.current = true;
-                          initiateCall(user);
-                        }}
-                        className="bg-purple-500 text-white px-4 py-2 rounded"
-                      >
-                        Call & Record
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <CallStatus
+                  callPartner={callPartner}
+                  callDuration={callDuration}
+                  remoteAudioRef={remoteAudioRef}
+                  formatCallDuration={formatCallDuration}
+                />
+                <CallControls
+                  isMuted={isMuted}
+                  isRecording={isRecording}
+                  autoRecord={autoRecordRef.current}
+                  toggleMute={toggleMute}
+                  toggleRecording={toggleRecording}
+                  endCall={endCall}
+                />
               </>
+            ) : (
+              <OnlineUsersList
+                onlineUsers={onlineUsers}
+                initiateCall={initiateCall}
+                initiateCallWithRecording={initiateCallWithRecording}
+              />
             )}
           </>
         ) : (
